@@ -1,0 +1,5 @@
+#define IDB_BACKGROUND 101
+#define ID_START 102
+#define ID_RESET 103
+#define ID_EXIT 104
+#define ID_TIMER_HIGHLIGHT 105

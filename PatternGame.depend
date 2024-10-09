@@ -1,0 +1,13 @@
+# depslib dependency file v1.0
+1728462613 source:c:\univerity\vii-semestras\windows-api\patterngame\main.cpp
+	<windows.h>
+	<stdio.h>
+	<stdlib.h>
+	<time.h>
+	"resource.h"
+
+1728459185 source:c:\univerity\vii-semestras\windows-api\patterngame\resource.rc
+	"resource.h"
+
+1728391798 c:\univerity\vii-semestras\windows-api\patterngame\resource.h
+

@@ -1,0 +1,12 @@
+#include "resource.h"
+
+IDB_BACKGROUND BITMAP "background.bmp" // Change this to the path of your image
+
+IDR_MENU MENU
+BEGIN
+    POPUP "Settings"
+    BEGIN
+        MENUITEM "Reset", ID_RESET
+        MENUITEM "Exit",  ID_EXIT
+    END
+END
