@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1728462613 source:c:\univerity\vii-semestras\windows-api\patterngame\main.cpp
+1728551282 source:c:\univerity\vii-semestras\windows-api\patterngame\main.cpp
 	<windows.h>
 	<stdio.h>
 	<stdlib.h>

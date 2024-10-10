@@ -6,6 +6,8 @@
 
 #define GRID_SIZE 3  // Initial grid size
 #define MAX_GRID_SIZE 10
+#define MAX_TOP_SCORES 5
+#define SCORE_FILE "highscores.txt"
 
 HBITMAP hBackgroundBitmap;
 
@@ -19,10 +21,10 @@ int currentLevel = 1;      // Track the current level
 int playerSelectionCount = 0;  // To count how many blocks the player has selected
 HWND hwndScoreDisplay;  // Handle for score display static text
 int totalBlocks = gridSize * gridSize; // Define totalBlocks here
-const int totalLevels = 3;
+const int totalLevels = 5;
 
 HINSTANCE hInst;
-HWND hwndStartButton, hwndResetButton, hwndExitButton, hwndLevelDisplay;
+HWND hwndStartButton, hwndLevelDisplay;
 BOOL patternShown = FALSE;
 
 // Function Prototypes
@@ -31,7 +33,17 @@ void DrawGrid(HWND hwnd, HDC hdc);
 void CheckPlayerSelections(HWND hwnd);
 void NextLevel(HWND hwnd);
 void ResetGame(HWND hwnd);
+void UpdateScoreDisplay(HWND hwnd);
 void UpdateLevelDisplay(HWND hwnd);
+void SaveHighScore(int score);
+void LoadHighScores();
+
+// Structure to store scores with timestamps
+typedef struct
+{
+    int score;
+    char timestamp[100];  // Stores the date and time
+} HighScore;
 
 // Function to create the main window
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -55,7 +67,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     hwnd = CreateWindow(
                "PatternMemoryGame", "Pattern Memory Game",
                WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, // Static window
-               CW_USEDEFAULT, CW_USEDEFAULT, 600, 550,    // Window size
+               CW_USEDEFAULT, CW_USEDEFAULT, 600, 590,    // Window size
                NULL, NULL, hInstance, NULL);
 
     ShowWindow(hwnd, nCmdShow);
@@ -111,6 +123,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                "STATIC", "Score: 0", WS_VISIBLE | WS_CHILD | SS_CENTERIMAGE | SS_CENTER,
                                490, 10, 100, 30, hwnd, NULL, hInst, NULL);
 
+        LoadHighScores();  // Load the top scores at the start of the game
         break;
     }
 
@@ -149,9 +162,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         {
             int x = LOWORD(lParam);
             int y = HIWORD(lParam);
-            int cellX = (x - 100) / 60; // Adjust based on grid position
-            int cellY = (y - 100) / 60;
 
+            // Use the same startX and startY as in DrawGrid
+            int cellSize = 60;
+            int startX = (600 - (gridSize * cellSize)) / 2;
+            int startY = 100;  // Keep it the same as in DrawGrid
+
+            // Calculate which cell was clicked
+            int cellX = (x - startX) / cellSize;
+            int cellY = (y - startY) / cellSize;
+
+            // Ensure the selected cell is within bounds
             if (cellX >= 0 && cellX < gridSize && cellY >= 0 && cellY < gridSize)
             {
                 int index = cellY * gridSize + cellX;
@@ -173,6 +194,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         break;
     }
+
 
     case WM_PAINT:
     {
@@ -234,7 +256,12 @@ void DrawGrid(HWND hwnd, HDC hdc)
 {
     RECT outerRect, innerRect;
     int cellSize = 60;
-    int borderThickness = 5;  // Adjust to increase border size
+    int gridPadding = 50;  // Padding from the edge of the window
+    int borderThickness = 5;  // Border size
+
+    // Calculate the starting X and Y coordinates for centering
+    int startX = (600 - (gridSize * cellSize)) / 2;
+    int startY = 100;  // Keep it a bit lower to allow for header and score display
 
     for (int row = 0; row < gridSize; row++)
     {
@@ -244,117 +271,231 @@ void DrawGrid(HWND hwnd, HDC hdc)
 
             // Outer rectangle (border)
             SetRect(&outerRect,
-                    100 + col * cellSize,
-                    100 + row * cellSize,
-                    160 + col * cellSize,
-                    160 + row * cellSize);
+                    startX + col * cellSize,
+                    startY + row * cellSize,
+                    startX + (col + 1) * cellSize,
+                    startY + (row + 1) * cellSize);
 
             // Inner rectangle (inside the border)
             SetRect(&innerRect,
-                    100 + col * cellSize + borderThickness,
-                    100 + row * cellSize + borderThickness,
-                    160 + col * cellSize - borderThickness,
-                    160 + row * cellSize - borderThickness);
+                    startX + col * cellSize + borderThickness,
+                    startY + row * cellSize + borderThickness,
+                    startX + (col + 1) * cellSize - borderThickness,
+                    startY + (row + 1) * cellSize - borderThickness);
 
-            // Draw the outer border
-            FillRect(hdc, &outerRect, (HBRUSH)GetStockObject(BLACK_BRUSH));  // Black border
-
-            // Draw the inner part based on whether the cell is highlighted, selected, or empty
-            if (highlightedBlocks[index] && patternShown)
+            // Check if block is highlighted
+            if (highlightedBlocks[index] == 1 && patternShown)
             {
-                FillRect(hdc, &innerRect, CreateSolidBrush(RGB(255, 255, 0)));  // Yellow for highlighted blocks
+                FillRect(hdc, &outerRect, CreateSolidBrush(RGB(255, 0, 0)));  // Red for pattern
             }
-            else if (playerSelections[index])
+            else if (playerSelections[index] == 1)
             {
-                FillRect(hdc, &innerRect, CreateSolidBrush(RGB(0, 255, 0)));  // Green for selected blocks
+                FillRect(hdc, &outerRect, CreateSolidBrush(RGB(0, 255, 0)));  // Green for selected
             }
             else
             {
-                FillRect(hdc, &innerRect, (HBRUSH)GetStockObject(WHITE_BRUSH));  // Opaque white background for empty cells
+                FillRect(hdc, &outerRect, CreateSolidBrush(RGB(255, 255, 255)));  // Default white
             }
+
+            // Draw grid cell border
+            FrameRect(hdc, &outerRect, CreateSolidBrush(RGB(0, 0, 0)));
         }
     }
 }
 
-// Function to check if player selections are correct
+// Function to check if player's selections match the pattern
 void CheckPlayerSelections(HWND hwnd)
 {
-    for (int i = 0; i < totalBlocks; i++)
+    int correctSelections = 0;
+    char buffer[100];
+
+    for (int i = 0; i < gridSize * gridSize; i++)
     {
         if (playerSelections[i] == 1 && highlightedBlocks[i] == 1)
         {
-            // Correct selection, increase score
-            score += 100;
-            char scoreText[20];
-            sprintf(scoreText, "Score: %d", score);
-            SetWindowText(hwndScoreDisplay, scoreText);
+            correctSelections++;
         }
-        else if (playerSelections[i] == 1 && highlightedBlocks[i] == 0)
+        else if (playerSelections[i] == 1 && highlightedBlocks[i] != 1)
         {
-            // Incorrect selection, show message and reset game
-            MessageBox(hwnd, "Incorrect! Game over!", "Failure", MB_OK);
+            sprintf(buffer, "Wrong block selected! Game Over. Your score: %d", score);
+            MessageBox(hwnd, buffer, "Game Over", MB_OK);
+            SaveHighScore(score);  // Save the score on failure
             ResetGame(hwnd);
             return;
         }
     }
 
-    // If all selections are correct, go to the next level
-    if (playerSelectionCount == patternCount)
+    // If all selections are correct
+    if (correctSelections == patternCount)
     {
-        if (currentLevel >= totalLevels)    // Check if the player has reached level 5
+        score += 100 * patternCount;  // Add score for correct selections
+        UpdateScoreDisplay(hwnd);  // Update the score display
+
+        if (currentLevel == totalLevels)
         {
-            MessageBox(hwnd, "You won! Congratulations!", "Game Over", MB_OK | MB_ICONINFORMATION);
-            ResetGame(hwnd);  // Restart the game
+            sprintf(buffer, "Congratulations! You have completed all levels. Your score: %d", score);
+            MessageBox(hwnd, buffer, "Game Complete", MB_OK);
+            SaveHighScore(score);  // Save the score after game completion
+            ResetGame(hwnd);
         }
         else
         {
-            MessageBox(hwnd, "Correct! Moving to the next level.", "Success", MB_OK);
-            NextLevel(hwnd);
+            MessageBox(hwnd, "Correct! Advancing to the next level.", "Success", MB_OK);
+            NextLevel(hwnd);  // Move to next level
         }
     }
 }
 
-// Function to advance to the next level
+// Function to move to the next level
 void NextLevel(HWND hwnd)
 {
-    if (gridSize < MAX_GRID_SIZE)
-    {
-        gridSize++;
-    }
+    currentLevel++;
     patternCount++;
 
-    // Reset selections and increase level
-    ZeroMemory(highlightedBlocks, sizeof(highlightedBlocks));
+    // Increase grid size at certain levels (optional)
+    if (gridSize < MAX_GRID_SIZE)
+        gridSize++;
+
+    // Update the level and score displays
+    UpdateLevelDisplay(hwnd);
+    char scoreBuffer[50];
+    sprintf(scoreBuffer, "Score: %d", score);
+    SetWindowText(hwndScoreDisplay, scoreBuffer);
+
+    // Reset player selections
     ZeroMemory(playerSelections, sizeof(playerSelections));
     playerSelectionCount = 0;
-    currentLevel++;
 
-    UpdateLevelDisplay(hwnd);
-    ShowPattern(hwnd);
+    ShowPattern(hwnd);  // Show new pattern
 }
 
-// Function to reset the game state
+// Function to reset the game
 void ResetGame(HWND hwnd)
 {
-    gridSize = GRID_SIZE;
+    currentLevel = 1;
     patternCount = 3;
     score = 0;
-    currentLevel = 1;
+    gridSize = GRID_SIZE;
 
+    // Reset the level and score displays
+    UpdateLevelDisplay(hwnd);
     SetWindowText(hwndScoreDisplay, "Score: 0");
 
-    ZeroMemory(highlightedBlocks, sizeof(highlightedBlocks));
     ZeroMemory(playerSelections, sizeof(playerSelections));
+    ZeroMemory(highlightedBlocks, sizeof(highlightedBlocks));
     playerSelectionCount = 0;
-
-    UpdateLevelDisplay(hwnd);
-    InvalidateRect(hwnd, NULL, TRUE);  // Trigger repaint
+    InvalidateRect(hwnd, NULL, TRUE);  // Repaint the grid
 }
 
-// Function to update the level display
+
+void UpdateScoreDisplay(HWND hwnd)
+{
+    char scoreBuffer[50];
+    sprintf(scoreBuffer, "Score: %d", score);
+    SetWindowText(hwndScoreDisplay, scoreBuffer);
+}
+
+// Function to update level display
 void UpdateLevelDisplay(HWND hwnd)
 {
-    char levelText[20];
-    sprintf(levelText, "Level: %d / %d", currentLevel, totalLevels);
-    SetWindowText(hwndLevelDisplay, levelText);
+    char buffer[50];
+    sprintf(buffer, "Level: %d", currentLevel);
+    SetWindowText(hwndLevelDisplay, buffer);
+}
+
+// Function to save high scores to a file
+// Function to save high scores to a file and ensure they are sorted
+void SaveHighScore(int newScore)
+{
+    HighScore scores[MAX_TOP_SCORES + 1];  // One extra slot for the new score
+    int scoreCount = 0;
+
+    // Load existing scores from the file
+    FILE *file = fopen(SCORE_FILE, "r");
+    if (file != NULL)
+    {
+        while (fscanf(file, "%d %99[^\n]", &scores[scoreCount].score, scores[scoreCount].timestamp) == 2 && scoreCount < MAX_TOP_SCORES)
+        {
+            scoreCount++;
+        }
+        fclose(file);
+    }
+
+    // Add the new score
+    if (scoreCount < MAX_TOP_SCORES || newScore > scores[MAX_TOP_SCORES - 1].score)
+    {
+        time_t now = time(NULL);
+        struct tm *local = localtime(&now);
+        char timestamp[100];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", local);
+
+        // Insert the new score at the end
+        scores[scoreCount].score = newScore;
+        strcpy(scores[scoreCount].timestamp, timestamp);
+        scoreCount++;
+    }
+
+    // Sort scores in descending order
+    for (int i = 0; i < scoreCount - 1; i++)
+    {
+        for (int j = i + 1; j < scoreCount; j++)
+        {
+            if (scores[i].score < scores[j].score)
+            {
+                HighScore temp = scores[i];
+                scores[i] = scores[j];
+                scores[j] = temp;
+            }
+        }
+    }
+
+    // Write back the top 5 scores to the file
+    file = fopen(SCORE_FILE, "w");
+    if (file != NULL)
+    {
+        for (int i = 0; i < scoreCount && i < MAX_TOP_SCORES; i++)
+        {
+            fprintf(file, "%d %s\n", scores[i].score, scores[i].timestamp);
+        }
+        fclose(file);
+    }
+    else
+    {
+        MessageBox(NULL, "Error opening file for high score saving!", "File Error", MB_OK);
+    }
+}
+
+// Function to load high scores from a file
+void LoadHighScores()
+{
+    FILE *file = fopen(SCORE_FILE, "r");
+    if (file != NULL)
+    {
+        HighScore scores[MAX_TOP_SCORES] = {0};
+        int i = 0;
+
+        while (fscanf(file, "%d %99[^\n]", &scores[i].score, scores[i].timestamp) == 2 && i < MAX_TOP_SCORES)
+        {
+            i++;
+        }
+
+        fclose(file);
+
+        // Sort the scores in descending order (optional)
+
+        // Display the high scores (could be printed, shown in a window, etc.)
+        char scoreDisplay[500] = "Top 5 Scores:\n";
+        for (int j = 0; j < i; j++)
+        {
+            char entry[100];
+            sprintf(entry, "%d - %s\n", scores[j].score, scores[j].timestamp);
+            strcat(scoreDisplay, entry);
+        }
+
+        MessageBox(NULL, scoreDisplay, "High Scores", MB_OK);
+    }
+    else
+    {
+        MessageBox(NULL, "No high score file found or unable to open!", "File Error", MB_OK);
+    }
 }
