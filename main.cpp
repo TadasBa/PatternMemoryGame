@@ -9,20 +9,18 @@
 #define MAX_TOP_SCORES 5
 #define SCORE_FILE "highscores.txt"
 
-HBITMAP hBackgroundBitmap;
-
 // Global variables
 int gridSize = GRID_SIZE;
 int highlightedBlocks[100];
-int playerSelections[100];  // Max player selections
+int playerSelections[100];
 int patternCount = 3;      // Initial number of highlighted blocks
 int score = 0;
-int currentLevel = 1;      // Track the current level
+int currentLevel = 1;
 int playerSelectionCount = 0;  // To count how many blocks the player has selected
 HWND hwndScoreDisplay;  // Handle for score display static text
 int totalBlocks = gridSize * gridSize; // Define totalBlocks here
-const int totalLevels = 3;
-
+const int totalLevels = 5;
+HBITMAP hBackgroundBitmap;
 HINSTANCE hInst;
 HWND hwndStartButton, hwndLevelDisplay;
 BOOL patternShown = FALSE;
@@ -35,6 +33,8 @@ void NextLevel(HWND hwnd);
 void ResetGame(HWND hwnd);
 void UpdateScoreDisplay(HWND hwnd);
 void UpdateLevelDisplay(HWND hwnd);
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM); // Function to create the main window
+
 
 // Declare function pointers for the DLL functions
 typedef void (*SaveHighScoreFunc)(int newScore);
@@ -46,17 +46,17 @@ SaveHighScoreFunc pSaveHighScore = nullptr;
 LoadHighScoresFunc pLoadHighScores = nullptr;
 SomeFunctionFunc pSomeFunction = nullptr;
 
+
 typedef void (__cdecl *MYPROC)(LPCSTR);
+
 
 // Structure to store scores with timestamps
 typedef struct
 {
     int score;
-    char timestamp[100];  // Stores the date and time
+    char timestamp[100];  // Stores the date and time of specific score
 } HighScore;
 
-// Function to create the main window
-LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 // Main program entry
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -74,11 +74,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClass(&wc);
 
-    hwnd = CreateWindow(
-               "PatternMemoryGame", "Pattern Memory Game",
-               WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, // Static window
-               CW_USEDEFAULT, CW_USEDEFAULT, 600, 590,    // Window size
-               NULL, NULL, hInstance, NULL);
+    hwnd = CreateWindow("PatternMemoryGame", "Pattern Memory Game", WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT, 600, 590, NULL, NULL, hInstance, NULL);
 
     ShowWindow(hwnd, nCmdShow);
 
@@ -97,7 +93,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     HDC hdc;
     HDC hMemDC;
     PAINTSTRUCT ps;
-
     HMODULE hDll;
 
     switch (msg)
@@ -132,6 +127,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             MessageBox(hwnd, errorMsg, "Error", MB_OK | MB_ICONERROR);
         }
 
+
         // Create the Settings Menu
         HMENU hMenu = CreateMenu();
         HMENU hSubMenu = CreatePopupMenu();
@@ -143,18 +139,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
         SetMenu(hwnd, hMenu);
 
-        hwndStartButton = CreateWindow(
-                              "BUTTON", "Start", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-                              10, 10, 100, 30, hwnd, (HMENU)ID_START, hInst, NULL);
-
-        hwndLevelDisplay = CreateWindow(
-                               "STATIC", "Level: ", WS_VISIBLE | WS_CHILD | SS_CENTERIMAGE | SS_CENTER,
-                               380, 10, 100, 30, hwnd, NULL, hInst, NULL);
-
-        // Score display static text
-        hwndScoreDisplay = CreateWindow(
-                               "STATIC", "Score: 0", WS_VISIBLE | WS_CHILD | SS_CENTERIMAGE | SS_CENTER,
-                               490, 10, 100, 30, hwnd, NULL, hInst, NULL);
+        hwndStartButton = CreateWindow("BUTTON", "Start", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON, 10, 10, 100, 30, hwnd, (HMENU)ID_START, hInst, NULL);
+        hwndLevelDisplay = CreateWindow("STATIC", "Level: ", WS_VISIBLE | WS_CHILD | SS_CENTERIMAGE | SS_CENTER, 380, 10, 100, 30, hwnd, NULL, hInst, NULL);
+        hwndScoreDisplay = CreateWindow("STATIC", "Score: 0", WS_VISIBLE | WS_CHILD | SS_CENTERIMAGE | SS_CENTER, 490, 10, 100, 30, hwnd, NULL, hInst, NULL);
         break;
     }
 
@@ -233,7 +220,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_PAINT:
     {
         hdc = BeginPaint(hwnd, &ps);
-        // Draw background
         hMemDC = CreateCompatibleDC(hdc);
         SelectObject(hMemDC, hBackgroundBitmap);
         BITMAP bitmap;
@@ -247,7 +233,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_DESTROY:
     {
-        DeleteObject(hBackgroundBitmap); // Clean up
+        // Clean up
+        DeleteObject(hBackgroundBitmap);
         FreeLibrary(hDll);
         PostQuitMessage(0);
         break;
@@ -304,18 +291,10 @@ void DrawGrid(HWND hwnd, HDC hdc)
             int index = row * gridSize + col;
 
             // Outer rectangle (border)
-            SetRect(&outerRect,
-                    startX + col * cellSize,
-                    startY + row * cellSize,
-                    startX + (col + 1) * cellSize,
-                    startY + (row + 1) * cellSize);
+            SetRect(&outerRect, startX + col * cellSize, startY + row * cellSize, startX + (col + 1) * cellSize, startY + (row + 1) * cellSize);
 
             // Inner rectangle (inside the border)
-            SetRect(&innerRect,
-                    startX + col * cellSize + borderThickness,
-                    startY + row * cellSize + borderThickness,
-                    startX + (col + 1) * cellSize - borderThickness,
-                    startY + (row + 1) * cellSize - borderThickness);
+            SetRect(&innerRect, startX + col * cellSize + borderThickness, startY + row * cellSize + borderThickness, startX + (col + 1) * cellSize - borderThickness, startY + (row + 1) * cellSize - borderThickness);
 
             // Check if block is highlighted
             if (highlightedBlocks[index] == 1 && patternShown)
@@ -386,7 +365,6 @@ void NextLevel(HWND hwnd)
     currentLevel++;
     patternCount++;
 
-    // Increase grid size at certain levels (optional)
     if (gridSize < MAX_GRID_SIZE)
         gridSize++;
 
@@ -421,7 +399,6 @@ void ResetGame(HWND hwnd)
     InvalidateRect(hwnd, NULL, TRUE);  // Repaint the grid
 }
 
-
 void UpdateScoreDisplay(HWND hwnd)
 {
     char scoreBuffer[50];
@@ -429,7 +406,6 @@ void UpdateScoreDisplay(HWND hwnd)
     SetWindowText(hwndScoreDisplay, scoreBuffer);
 }
 
-// Function to update level display
 void UpdateLevelDisplay(HWND hwnd)
 {
     char buffer[50];
