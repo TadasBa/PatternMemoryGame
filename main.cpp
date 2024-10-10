@@ -21,7 +21,7 @@ int currentLevel = 1;      // Track the current level
 int playerSelectionCount = 0;  // To count how many blocks the player has selected
 HWND hwndScoreDisplay;  // Handle for score display static text
 int totalBlocks = gridSize * gridSize; // Define totalBlocks here
-const int totalLevels = 5;
+const int totalLevels = 3;
 
 HINSTANCE hInst;
 HWND hwndStartButton, hwndLevelDisplay;
@@ -35,8 +35,18 @@ void NextLevel(HWND hwnd);
 void ResetGame(HWND hwnd);
 void UpdateScoreDisplay(HWND hwnd);
 void UpdateLevelDisplay(HWND hwnd);
-void SaveHighScore(int score);
-void LoadHighScores();
+
+// Declare function pointers for the DLL functions
+typedef void (*SaveHighScoreFunc)(int newScore);
+typedef void (*LoadHighScoresFunc)();
+typedef void (*SomeFunctionFunc)(LPCSTR sometext);
+
+// Global function pointers
+SaveHighScoreFunc pSaveHighScore = nullptr;
+LoadHighScoresFunc pLoadHighScores = nullptr;
+SomeFunctionFunc pSomeFunction = nullptr;
+
+typedef void (__cdecl *MYPROC)(LPCSTR);
 
 // Structure to store scores with timestamps
 typedef struct
@@ -88,10 +98,32 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     HDC hMemDC;
     PAINTSTRUCT ps;
 
+    HMODULE hDll;
+
     switch (msg)
     {
     case WM_CREATE:
     {
+        // Load the DLL
+        hDll = LoadLibrary("PatternGameDLL.dll");
+        if (hDll)
+        {
+            // Get the addresses of the functions from the DLL
+            pSaveHighScore = (SaveHighScoreFunc)GetProcAddress(hDll, "SaveHighScore");
+            pLoadHighScores = (LoadHighScoresFunc)GetProcAddress(hDll, "LoadHighScores");
+            pSomeFunction = (SomeFunctionFunc)GetProcAddress(hDll, "SomeFunction");
+
+            // Check if the function pointers were successfully loaded
+            if (!pSaveHighScore || !pLoadHighScores || !pSomeFunction)
+            {
+                MessageBox(NULL, "Could not load DLL functions!", "Error", MB_OK | MB_ICONERROR);
+            }
+        }
+        else
+        {
+            MessageBox(NULL, "Could not load DLL!", "Error", MB_OK | MB_ICONERROR);
+        }
+
         hBackgroundBitmap = LoadBitmap(hInst, MAKEINTRESOURCE(IDB_BACKGROUND)); // Load background
         if (hBackgroundBitmap == NULL)
         {
@@ -104,9 +136,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         HMENU hMenu = CreateMenu();
         HMENU hSubMenu = CreatePopupMenu();
 
-        AppendMenu(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hSubMenu, "Settings");
+        AppendMenu(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hSubMenu, "Menu");
         AppendMenu(hSubMenu, MF_STRING, ID_RESET, "Reset");
         AppendMenu(hSubMenu, MF_STRING, ID_EXIT, "Exit");
+        AppendMenu(hSubMenu, MF_STRING, ID_SCORES, "High Scores");
 
         SetMenu(hwnd, hMenu);
 
@@ -122,8 +155,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         hwndScoreDisplay = CreateWindow(
                                "STATIC", "Score: 0", WS_VISIBLE | WS_CHILD | SS_CENTERIMAGE | SS_CENTER,
                                490, 10, 100, 30, hwnd, NULL, hInst, NULL);
-
-        LoadHighScores();  // Load the top scores at the start of the game
         break;
     }
 
@@ -140,6 +171,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             break;
         case ID_EXIT:
             PostQuitMessage(0);  // Exit the game
+            break;
+        case ID_SCORES:
+            pLoadHighScores();  // Load the top scores at the start of the game
             break;
         }
         break;
@@ -214,6 +248,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_DESTROY:
     {
         DeleteObject(hBackgroundBitmap); // Clean up
+        FreeLibrary(hDll);
         PostQuitMessage(0);
         break;
     }
@@ -256,7 +291,6 @@ void DrawGrid(HWND hwnd, HDC hdc)
 {
     RECT outerRect, innerRect;
     int cellSize = 60;
-    int gridPadding = 50;  // Padding from the edge of the window
     int borderThickness = 5;  // Border size
 
     // Calculate the starting X and Y coordinates for centering
@@ -286,7 +320,7 @@ void DrawGrid(HWND hwnd, HDC hdc)
             // Check if block is highlighted
             if (highlightedBlocks[index] == 1 && patternShown)
             {
-                FillRect(hdc, &outerRect, CreateSolidBrush(RGB(255, 0, 0)));  // Red for pattern
+                FillRect(hdc, &outerRect, CreateSolidBrush(RGB(255,222,33)));  // Yellow for pattern
             }
             else if (playerSelections[index] == 1)
             {
@@ -319,7 +353,7 @@ void CheckPlayerSelections(HWND hwnd)
         {
             sprintf(buffer, "Wrong block selected! Game Over. Your score: %d", score);
             MessageBox(hwnd, buffer, "Game Over", MB_OK);
-            SaveHighScore(score);  // Save the score on failure
+            pSaveHighScore(score);  // Save the score on failure
             ResetGame(hwnd);
             return;
         }
@@ -335,7 +369,7 @@ void CheckPlayerSelections(HWND hwnd)
         {
             sprintf(buffer, "Congratulations! You have completed all levels. Your score: %d", score);
             MessageBox(hwnd, buffer, "Game Complete", MB_OK);
-            SaveHighScore(score);  // Save the score after game completion
+            pSaveHighScore(score);  // Save the score after game completion
             ResetGame(hwnd);
         }
         else
@@ -401,101 +435,4 @@ void UpdateLevelDisplay(HWND hwnd)
     char buffer[50];
     sprintf(buffer, "Level: %d", currentLevel);
     SetWindowText(hwndLevelDisplay, buffer);
-}
-
-// Function to save high scores to a file
-// Function to save high scores to a file and ensure they are sorted
-void SaveHighScore(int newScore)
-{
-    HighScore scores[MAX_TOP_SCORES + 1];  // One extra slot for the new score
-    int scoreCount = 0;
-
-    // Load existing scores from the file
-    FILE *file = fopen(SCORE_FILE, "r");
-    if (file != NULL)
-    {
-        while (fscanf(file, "%d %99[^\n]", &scores[scoreCount].score, scores[scoreCount].timestamp) == 2 && scoreCount < MAX_TOP_SCORES)
-        {
-            scoreCount++;
-        }
-        fclose(file);
-    }
-
-    // Add the new score
-    if (scoreCount < MAX_TOP_SCORES || newScore > scores[MAX_TOP_SCORES - 1].score)
-    {
-        time_t now = time(NULL);
-        struct tm *local = localtime(&now);
-        char timestamp[100];
-        strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", local);
-
-        // Insert the new score at the end
-        scores[scoreCount].score = newScore;
-        strcpy(scores[scoreCount].timestamp, timestamp);
-        scoreCount++;
-    }
-
-    // Sort scores in descending order
-    for (int i = 0; i < scoreCount - 1; i++)
-    {
-        for (int j = i + 1; j < scoreCount; j++)
-        {
-            if (scores[i].score < scores[j].score)
-            {
-                HighScore temp = scores[i];
-                scores[i] = scores[j];
-                scores[j] = temp;
-            }
-        }
-    }
-
-    // Write back the top 5 scores to the file
-    file = fopen(SCORE_FILE, "w");
-    if (file != NULL)
-    {
-        for (int i = 0; i < scoreCount && i < MAX_TOP_SCORES; i++)
-        {
-            fprintf(file, "%d %s\n", scores[i].score, scores[i].timestamp);
-        }
-        fclose(file);
-    }
-    else
-    {
-        MessageBox(NULL, "Error opening file for high score saving!", "File Error", MB_OK);
-    }
-}
-
-// Function to load high scores from a file
-void LoadHighScores()
-{
-    FILE *file = fopen(SCORE_FILE, "r");
-    if (file != NULL)
-    {
-        HighScore scores[MAX_TOP_SCORES] = {0};
-        int i = 0;
-
-        while (fscanf(file, "%d %99[^\n]", &scores[i].score, scores[i].timestamp) == 2 && i < MAX_TOP_SCORES)
-        {
-            i++;
-        }
-
-        fclose(file);
-
-        // Sort the scores in descending order (optional)
-
-        // Display the high scores (could be printed, shown in a window, etc.)
-        char scoreDisplay[500] = "Top 5 Scores:\n";
-        for (int j = 0; j < i; j++)
-        {
-            char entry[100];
-            sprintf(entry, "%d - %s\n", scores[j].score, scores[j].timestamp);
-            strcat(scoreDisplay, entry);
-        }
-
-        MessageBox(NULL, scoreDisplay, "High Scores", MB_OK);
-    }
-    else
-    {
-        MessageBox(NULL, "No high score file found or unable to open!", "File Error", MB_OK);
-    }
 }
