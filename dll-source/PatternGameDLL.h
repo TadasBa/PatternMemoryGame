@@ -11,7 +11,6 @@
 extern "C" {
 #endif
 
-void DLL_EXPORT SomeFunction(const LPCSTR sometext);
 void DLL_EXPORT SaveHighScore(int newScore);
 void DLL_EXPORT LoadHighScores();
 

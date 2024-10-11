@@ -14,15 +14,6 @@ typedef struct
     char timestamp[100];  // Stores the date and time
 } HighScore;
 
-// Define DLL_EXPORT
-//#define DLL_EXPORT __declspec(dllexport)
-
-// A sample exported function
-void DLL_EXPORT SomeFunction(LPCSTR sometext)
-{
-    MessageBoxA(0, sometext, "DLL Message", MB_OK | MB_ICONINFORMATION);
-}
-
 // Function to save high scores to a file and ensure they are sorted
 void DLL_EXPORT SaveHighScore(int newScore)
 {
@@ -100,9 +91,7 @@ void DLL_EXPORT LoadHighScores()
 
         fclose(file);
 
-        // Sort the scores in descending order (optional)
-
-        // Display the high scores (could be printed, shown in a window, etc.)
+        // Display the high scores
         char scoreDisplay[500] = "Top 5 Scores:\n";
         for (int j = 0; j < i; j++)
         {

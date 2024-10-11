@@ -18,7 +18,6 @@ int score = 0;
 int currentLevel = 1;
 int playerSelectionCount = 0;  // To count how many blocks the player has selected
 HWND hwndScoreDisplay;  // Handle for score display static text
-int totalBlocks = gridSize * gridSize; // Define totalBlocks here
 const int totalLevels = 5;
 HBITMAP hBackgroundBitmap;
 HINSTANCE hInst;
@@ -35,28 +34,13 @@ void UpdateScoreDisplay(HWND hwnd);
 void UpdateLevelDisplay(HWND hwnd);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM); // Function to create the main window
 
-
 // Declare function pointers for the DLL functions
 typedef void (*SaveHighScoreFunc)(int newScore);
 typedef void (*LoadHighScoresFunc)();
-typedef void (*SomeFunctionFunc)(LPCSTR sometext);
 
 // Global function pointers
 SaveHighScoreFunc pSaveHighScore = nullptr;
 LoadHighScoresFunc pLoadHighScores = nullptr;
-SomeFunctionFunc pSomeFunction = nullptr;
-
-
-typedef void (__cdecl *MYPROC)(LPCSTR);
-
-
-// Structure to store scores with timestamps
-typedef struct
-{
-    int score;
-    char timestamp[100];  // Stores the date and time of specific score
-} HighScore;
-
 
 // Main program entry
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -65,7 +49,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     HWND hwnd;
     MSG msg;
 
-    hInst = hInstance;  // Initialize hInst here
+    hInst = hInstance;
 
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
@@ -106,10 +90,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             // Get the addresses of the functions from the DLL
             pSaveHighScore = (SaveHighScoreFunc)GetProcAddress(hDll, "SaveHighScore");
             pLoadHighScores = (LoadHighScoresFunc)GetProcAddress(hDll, "LoadHighScores");
-            pSomeFunction = (SomeFunctionFunc)GetProcAddress(hDll, "SomeFunction");
 
-            // Check if the function pointers were successfully loaded
-            if (!pSaveHighScore || !pLoadHighScores || !pSomeFunction)
+            if (!pSaveHighScore || !pLoadHighScores)
             {
                 MessageBox(NULL, "Could not load DLL functions!", "Error", MB_OK | MB_ICONERROR);
             }
@@ -150,7 +132,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         switch (LOWORD(wParam))
         {
         case ID_START:
-            ResetGame(hwnd);  // Start fresh
+            ResetGame(hwnd);
             ShowPattern(hwnd);
             break;
         case ID_RESET:
@@ -235,7 +217,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
         // Clean up
         DeleteObject(hBackgroundBitmap);
-        FreeLibrary(hDll);
         PostQuitMessage(0);
         break;
     }
@@ -278,7 +259,7 @@ void DrawGrid(HWND hwnd, HDC hdc)
 {
     RECT outerRect, innerRect;
     int cellSize = 60;
-    int borderThickness = 5;  // Border size
+    int borderThickness = 5;
 
     // Calculate the starting X and Y coordinates for centering
     int startX = (600 - (gridSize * cellSize)) / 2;
@@ -290,10 +271,8 @@ void DrawGrid(HWND hwnd, HDC hdc)
         {
             int index = row * gridSize + col;
 
-            // Outer rectangle (border)
             SetRect(&outerRect, startX + col * cellSize, startY + row * cellSize, startX + (col + 1) * cellSize, startY + (row + 1) * cellSize);
 
-            // Inner rectangle (inside the border)
             SetRect(&innerRect, startX + col * cellSize + borderThickness, startY + row * cellSize + borderThickness, startX + (col + 1) * cellSize - borderThickness, startY + (row + 1) * cellSize - borderThickness);
 
             // Check if block is highlighted
@@ -342,7 +321,7 @@ void CheckPlayerSelections(HWND hwnd)
     if (correctSelections == patternCount)
     {
         score += 100 * patternCount;  // Add score for correct selections
-        UpdateScoreDisplay(hwnd);  // Update the score display
+        UpdateScoreDisplay(hwnd);
 
         if (currentLevel == totalLevels)
         {
@@ -378,7 +357,7 @@ void NextLevel(HWND hwnd)
     ZeroMemory(playerSelections, sizeof(playerSelections));
     playerSelectionCount = 0;
 
-    ShowPattern(hwnd);  // Show new pattern
+    ShowPattern(hwnd);
 }
 
 // Function to reset the game

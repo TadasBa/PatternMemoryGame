@@ -2,4 +2,3 @@ EXPORTS
     DllMain @1
     LoadHighScores @2
     SaveHighScore @3
-    SomeFunction @4
